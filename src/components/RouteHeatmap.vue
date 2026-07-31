@@ -1,5 +1,5 @@
 <template>
-  <div ref="el" style="height: 320px; width: 100%"></div>
+  <div ref="el" style="height: 500px; width: 100%"></div>
 </template>
 
 <script setup lang="ts">
@@ -17,6 +17,12 @@ const el = ref<HTMLDivElement | null>(null)
 // type gap: leaflet ships no TypeScript definitions, so the map handle is any.
 let map: any
 let layer: any
+let resizeObserver: ResizeObserver | undefined
+let invalidateTimer: ReturnType<typeof setTimeout> | undefined
+
+function invalidateMapSize() {
+  map?.invalidateSize()
+}
 
 function draw() {
   if (!map) return
@@ -47,13 +53,24 @@ onMounted(() => {
     maxZoom: 19,
   }).addTo(map)
   draw()
-  // Expansion items mount their content at zero height first.
-  setTimeout(() => map && map.invalidateSize(), 50)
+  if (el.value) {
+    resizeObserver = new ResizeObserver(invalidateMapSize)
+    resizeObserver.observe(el.value)
+  }
+  window.addEventListener('resize', invalidateMapSize)
+  // Expansion transitions can complete after mount; invalidate again after layout settles.
+  requestAnimationFrame(() => requestAnimationFrame(invalidateMapSize))
+  invalidateTimer = setTimeout(invalidateMapSize, 250)
 })
 
 watch(() => props.routes, draw)
 
 onBeforeUnmount(() => {
+  if (invalidateTimer) clearTimeout(invalidateTimer)
+  invalidateTimer = undefined
+  resizeObserver?.disconnect()
+  resizeObserver = undefined
+  window.removeEventListener('resize', invalidateMapSize)
   map?.remove()
   map = undefined
 })
